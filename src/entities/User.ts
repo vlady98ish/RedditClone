@@ -3,7 +3,7 @@ import { ObjectType, Field, Int } from "type-graphql"; // import necessary decor
 
 @ObjectType() // defines the class as a GraphQL object type
 @Entity() // defines the class as an entity for MikroORM
-export class Post {
+export class User {
 
     @Field(() => Int) // defines the field as a GraphQL field with Int type
     @PrimaryKey() // marks this property as the primary key for the entity
@@ -17,8 +17,12 @@ export class Post {
     @Property({ type: 'date', onUpdate: () => new Date() }) // defines this property as a date type for the entity and updates the value to the current date and time when it is updated
     updatedAt = new Date(); // sets the default value to the current date and time
 
-    @Field() // defines the field as a GraphQL field with default String type
-    @Property({ type: 'text' }) // defines this property as a text type for the entity
-    title!: string; // defines the title property as a string
+    @Field(() => String) // defines the field as a GraphQL field with default String type
+    @Property({ type: 'text' , unique: true}) // defines this property as a text type for the entity
+    username!: string; // defines the title property as a string
+
+
+    @Property({ type: 'text'})
+    password!: string;
 
 }
