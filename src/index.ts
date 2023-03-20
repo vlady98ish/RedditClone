@@ -1,49 +1,76 @@
-
-import "reflect-metadata"
-import {MikroORM} from "@mikro-orm/core";
+import "reflect-metadata";
+import { MikroORM } from "@mikro-orm/core";
 
 import mikroOrmConfig from "./mikro-orm.config";
-import express from 'express'
-import {ApolloServer} from 'apollo-server-express'
-import {buildSchema} from 'type-graphql'
+import express from "express";
+import { ApolloServer } from "apollo-server-express";
+import { buildSchema } from "type-graphql";
 import { HelloResolver } from "./resolvers/hello";
 import { PostResolver } from "./resolvers/post";
-import {UserResolver} from "./resolvers/user";
+import { UserResolver } from "./resolvers/user";
 
+//Redis
+import redis from "redis";
+import session from "express-session";
+import connectRedis from "connect-redis";
+import { __prod__, COOKIE_NAME } from "./constants";
+import { MyContext } from "./types";
 
 const main = async () => {
-    // Connect to the database
-    const orm = await MikroORM.init(mikroOrmConfig);
+  // Connect to the database
+  const orm = await MikroORM.init(mikroOrmConfig);
 
-    // Automatically start database migration
-    await orm.getMigrator().up();
+  // Automatically start database migration
+  await orm.getMigrator().up();
 
-    // Create an Express app
-    const app = express();
+  // Create an Express app
+  const app = express();
 
-    // Create an Apollo Server instance
-    const apolloServer = new ApolloServer({
-        schema: await buildSchema({
-            resolvers: [HelloResolver, PostResolver, UserResolver],
-            validate: false,
-        }),
-        context: () => ({ em: orm.em }) // Inject the entity manager into the GraphQL context
-    });
-
-    // Start the Apollo Server
-    await apolloServer.start();
-
-    // Apply the Apollo middleware to the Express app
-    apolloServer.applyMiddleware({ app });
-
-    // Start the Express server
-    app.listen(4000, () => {
-        console.log('server started on localhost:4000')
+  let RedisStore = connectRedis(session);
+  const redisClient = redis.createClient();
+  const cors = {
+    credentials: true,
+    origin: ["https://studio.apollographql.com", "http://localhost:3000"],
+  };
+  app.set("trust proxy", !__prod__);
+  app.use(
+    session({
+      name: COOKIE_NAME,
+      store: new RedisStore({
+        client: redisClient,
+        disableTouch: true,
+      }),
+      cookie: {
+        maxAge: 1000 * 60 * 60 * 24 * 365 * 10, // 10 years
+        httpOnly: true,
+        sameSite: "lax",
+        secure: false, //TODO: change it to prod? true: false
+      },
+      secret: "keyboard cat",
+      resave: false,
+      saveUninitialized: false,
     })
+  );
 
+  // Create an Apollo Server instance
+  const apolloServer = new ApolloServer({
+    schema: await buildSchema({
+      resolvers: [HelloResolver, PostResolver, UserResolver],
+      validate: false,
+    }),
+    context: ({ req, res }: MyContext): MyContext => ({ em: orm.em, req, res }), // Inject the entity manager into the GraphQL context
+  });
 
+  // Start the Apollo Server
+  await apolloServer.start();
 
+  // Apply the Apollo middleware to the Express app
+  apolloServer.applyMiddleware({ app, cors });
 
+  // Start the Express server
+  app.listen(4000, () => {
+    console.log("server started on localhost:4000");
+  });
 
   //First way to work in async right way with orm, is to use Request Context.
   // await RequestContext.createAsync(orm.em, async() => {
@@ -51,13 +78,11 @@ const main = async () => {
   //   await orm.em.persistAndFlush(post);
   // });
 
-//   //Second way to work with orm it`s fork
-//   const posts = await orm.em.fork({}).find(Post, {});
-//     console.log(posts);
-
-  
+  //   //Second way to work with orm it`s fork
+  //   const posts = await orm.em.fork({}).find(Post, {});
+  //     console.log(posts);
 };
 
 main().catch((err) => {
-    console.error(err);
-})
+  console.error(err);
+});
