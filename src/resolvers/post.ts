@@ -1,66 +1,53 @@
 import { Post } from '../entities/Post'
-import { Arg, Ctx, Mutation, Query, Resolver } from 'type-graphql'
-import { MyContext } from 'src/types'
+import { Arg, Mutation, Query, Resolver } from 'type-graphql'
 
 //CRUD FOR GRAPHQL POSTS
 
-
 @Resolver()
 export class PostResolver {
-    //SELECT * FROM posts;
-    @Query(() => [Post])
-    posts(@Ctx() { em }: MyContext): Promise<Post[]> {
-        return em.find(Post, {});
+  //SELECT * FROM posts;
+  @Query(() => [Post])
+  posts(): Promise<Post[]> {
+    return Post.find();
+  }
+
+  //SELECT * FROM posts WHERE id = <id>;
+  @Query(() => Post, { nullable: true })
+  async post(@Arg("id") id: number): Promise<Post | null> {
+    //  em.findOne(Post, { id }); // MikroORM call with Enitity Manager, but we moved to TypeORM
+    return Post.findOneBy({ id });
+  }
+
+  @Mutation(() => Post)
+  async createPost(@Arg("title") title: string): Promise<Post> {
+    //MikroORM
+    // const post = em.create(Post, { title: title } as Post); // create a post
+    // await em.persistAndFlush(post); //push post to db
+    return Post.create({ title }).save();
+  }
+
+  @Mutation(() => Post, { nullable: true })
+  async updatePost(
+    @Arg("id") id: number,
+    @Arg("title", () => String, { nullable: true }) title: string
+  ): Promise<Post | null> {
+    const post = await Post.findOneBy({ id });
+    if (!post) {
+      return null;
     }
-
-    //SELECT * FROM posts WHERE id = <id>;
-    @Query(() => Post, { nullable: true })
-    async post(
-      @Arg("id") id: number,
-      @Ctx() { em }: MyContext
-    ): Promise<Post | null> {
-
-        return em.findOne(Post, { id });
+    if (typeof title !== "undefined") {
+      //MikroORM
+      // post.title = title;
+      // await em.persistAndFlush(post);
+      await Post.update({ id }, { title });
     }
+    return post;
+  }
 
-    @Mutation(() => Post)
-    async createPost(
-      @Arg("title") title: string,
-      @Ctx() { em }: MyContext
-    ): Promise<Post> {
-        const post = em.create(Post, { title: title } as Post); // create a post
-        await em.persistAndFlush(post); //push post to db
-        return post;
-    }
+  @Mutation(() => Boolean)
+  async deletePost(@Arg("id") id: number): Promise<boolean> {
+    await Post.delete(id);
 
-    @Mutation(() => Post, { nullable: true })
-    async updatePost(
-      @Arg("id") id: number,
-      @Arg("title", () => String, { nullable: true }) title: string,
-      @Ctx() { em }: MyContext
-    ): Promise<Post | null> {
-        const post = await em.findOne(Post, { id });
-        if (!post) {
-            return null;
-        }
-        if (typeof title !== "undefined") {
-            post.title = title;
-            await em.persistAndFlush(post);
-        }
-        return post;
-    }
-
-    @Mutation(() => Boolean)
-    async deletePost(
-      @Arg("id") id: number,
-      @Ctx() { em }: MyContext
-    ): Promise<boolean> {
-        try {
-            await em.nativeDelete(Post, { id });
-        } catch {
-            return false;
-        }
-
-        return true;
-    }
+    return true;
+  }
 }

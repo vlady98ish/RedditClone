@@ -1,7 +1,4 @@
 import "reflect-metadata";
-import { MikroORM } from "@mikro-orm/core";
-
-import mikroOrmConfig from "./mikro-orm.config";
 import express from "express";
 import { ApolloServer } from "apollo-server-express";
 import { buildSchema } from "type-graphql";
@@ -10,24 +7,32 @@ import { PostResolver } from "./resolvers/post";
 import { UserResolver } from "./resolvers/user";
 
 //Redis
-import redis from "redis";
+import Redis from "ioredis";
 import session from "express-session";
 import connectRedis from "connect-redis";
 import { __prod__, COOKIE_NAME } from "./constants";
 import { MyContext } from "./types";
+import { DataSource } from "typeorm";
+import { Post } from "./entities/Post";
+import { User } from "./entities/User";
 
 const main = async () => {
   // Connect to the database
-  const orm = await MikroORM.init(mikroOrmConfig);
-
-  // Automatically start database migration
-  await orm.getMigrator().up();
+  const conn = await new DataSource({
+    type: "postgres",
+    database: "redditclone2",
+    username: "postgres",
+    password: "1336473ww",
+    logging: true,
+    synchronize: true,
+    entities: [Post, User],
+  });
 
   // Create an Express app
   const app = express();
 
   let RedisStore = connectRedis(session);
-  const redisClient = redis.createClient();
+  const redis = new Redis();
   const cors = {
     credentials: true,
     origin: ["https://studio.apollographql.com", "http://localhost:3000"],
@@ -37,7 +42,7 @@ const main = async () => {
     session({
       name: COOKIE_NAME,
       store: new RedisStore({
-        client: redisClient,
+        client: redis,
         disableTouch: true,
       }),
       cookie: {
@@ -58,7 +63,11 @@ const main = async () => {
       resolvers: [HelloResolver, PostResolver, UserResolver],
       validate: false,
     }),
-    context: ({ req, res }: MyContext): MyContext => ({ em: orm.em, req, res }), // Inject the entity manager into the GraphQL context
+    context: ({ req, res }: MyContext): MyContext => ({
+      req,
+      res,
+      redis,
+    }), // Inject the entity manager into the GraphQL context
   });
 
   // Start the Apollo Server
